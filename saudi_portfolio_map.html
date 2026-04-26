@@ -1,0 +1,195 @@
+
+<h2 class="sr-only">Interactive map of Saudi Arabia showing 14 project locations, color-coded by contract status, with a sidebar listing all projects and their occupancy rates.</h2>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+<style>
+#wrap { display:flex; height:620px; border-radius:var(--border-radius-lg); overflow:hidden; border:0.5px solid var(--color-border-tertiary); }
+#sidebar { width:230px; flex-shrink:0; background:var(--color-background-secondary); display:flex; flex-direction:column; border-right:0.5px solid var(--color-border-tertiary); overflow:hidden; }
+#sid-head { padding:10px 12px; border-bottom:0.5px solid var(--color-border-tertiary); }
+#sid-head h3 { font-size:12px; font-weight:500; color:var(--color-text-primary); margin-bottom:8px; }
+.krow { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-bottom:8px; }
+.kc { background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-md); padding:6px 8px; }
+.kc-l { font-size:9px; color:var(--color-text-tertiary); font-weight:500; text-transform:uppercase; letter-spacing:.06em; margin-bottom:2px; }
+.kc-v { font-size:16px; font-weight:500; }
+.fpills { display:flex; flex-wrap:wrap; gap:4px; }
+.fp { font-size:10px; padding:3px 8px; border-radius:99px; border:0.5px solid var(--color-border-secondary); color:var(--color-text-secondary); background:transparent; cursor:pointer; }
+.fp.on { background:var(--color-background-primary); color:var(--color-text-primary); border-color:var(--color-border-primary); font-weight:500; }
+#proj-list { flex:1; overflow-y:auto; }
+#proj-list::-webkit-scrollbar { width:3px; }
+#proj-list::-webkit-scrollbar-thumb { background:var(--color-border-secondary); border-radius:2px; }
+.pi { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:0.5px solid var(--color-border-tertiary); cursor:pointer; transition:background .1s; }
+.pi:hover { background:var(--color-background-primary); }
+.pi.sel { background:var(--color-background-primary); }
+.pi-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.pi-info { flex:1; min-width:0; }
+.pi-name { font-size:11.5px; font-weight:500; color:var(--color-text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pi-sub  { font-size:10px; color:var(--color-text-tertiary); margin-top:1px; }
+.pi-occ  { font-size:11px; font-weight:500; flex-shrink:0; }
+#map { flex:1; }
+.leaflet-popup-content-wrapper { border-radius:10px !important; box-shadow:0 8px 30px rgba(0,0,0,0.18) !important; border:0.5px solid rgba(0,0,0,0.1) !important; }
+.leaflet-popup-content { margin:0 !important; font-family:inherit; }
+.pu { padding:12px 14px; min-width:210px; }
+.pu-name { font-size:13px; font-weight:500; margin-bottom:2px; }
+.pu-num  { font-size:10px; color:#888; margin-bottom:8px; }
+.pu-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 8px; margin-bottom:8px; font-size:11px; }
+.pu-lbl  { color:#888; }
+.pu-val  { font-weight:500; }
+.pu-bar-wrap { height:5px; background:#eee; border-radius:3px; overflow:hidden; margin-top:4px; }
+.pu-bar-fill { height:100%; border-radius:3px; }
+.pu-occ-row  { display:flex; justify-content:space-between; font-size:11px; margin-bottom:3px; }
+.pu-badge { display:inline-block; font-size:9px; font-weight:600; padding:2px 7px; border-radius:99px; margin-bottom:8px; }
+.ba { background:#d5f5e3; color:#0f6e56; }
+.be { background:#faeeda; color:#854f0b; }
+.bx { background:#fcebeb; color:#a32d2d; }
+.map-leg { position:absolute; bottom:12px; right:12px; z-index:900; background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-md); padding:8px 12px; font-size:11px; }
+.ll { display:flex; align-items:center; gap:6px; color:var(--color-text-secondary); margin-bottom:4px; }
+.ll:last-child { margin-bottom:0; }
+.ld { width:8px; height:8px; border-radius:50%; }
+</style>
+
+<div id="wrap">
+  <div id="sidebar">
+    <div id="sid-head">
+      <h3>Portfolio — Saudi Arabia</h3>
+      <div class="krow">
+        <div class="kc"><div class="kc-l">Projects</div><div class="kc-v" style="color:var(--color-text-info)">14</div></div>
+        <div class="kc"><div class="kc-l">Active</div><div class="kc-v" style="color:var(--color-text-success)">13</div></div>
+        <div class="kc"><div class="kc-l">Headcount</div><div class="kc-v">9,475</div></div>
+        <div class="kc"><div class="kc-l">Avg Occ.</div><div class="kc-v" style="color:var(--color-text-warning)">59%</div></div>
+      </div>
+      <div class="fpills">
+        <button class="fp on" onclick="filt('all',this)">All</button>
+        <button class="fp" onclick="filt('Active',this)">Active</button>
+        <button class="fp" onclick="filt('Ending Soon',this)">Ending</button>
+        <button class="fp" onclick="filt('Expired',this)">Expired</button>
+      </div>
+    </div>
+    <div id="proj-list"></div>
+  </div>
+
+  <div style="position:relative;flex:1;">
+    <div id="map" style="width:100%;height:100%;"></div>
+    <div class="map-leg">
+      <div class="ll"><div class="ld" style="background:#1D9E75"></div>Active</div>
+      <div class="ll"><div class="ld" style="background:#BA7517"></div>Ending soon</div>
+      <div class="ll"><div class="ld" style="background:#A32D2D"></div>Expired</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const MONEY = v => v>=1e6?'$'+(v/1e6).toFixed(1)+'M':v>=1e3?'$'+(v/1e3).toFixed(0)+'K':'$'+v;
+const OCC_C = v => v>=70?'#1D9E75':v>=40?'#BA7517':'#A32D2D';
+const ST_C  = s => s==='Active'?'#1D9E75':s==='Ending Soon'?'#BA7517':'#A32D2D';
+const ST_BC = s => s==='Active'?'ba':s==='Ending Soon'?'be':'bx';
+
+const P = [
+  {name:'Rig 1',         client:'Armco',      num:'265',  type:'Facilities Mgmt', location:'Jubail',       pic:'Mr. Jimmy',    end:'12 Feb 2026', value:64000000,  heads:29,   occ:56, status:'Expired',  days:-62,  lat:26.975, lng:49.550},
+  {name:'Rig 2',         client:'Subic',      num:'78',   type:'Operations',      location:'Jubail',       pic:'Mr. Arold',    end:'12 Jan 2027', value:24000000,  heads:32,   occ:20, status:'Active',   days:272,  lat:26.965, lng:49.568},
+  {name:'Rig 3',         client:'Kurdneft',   num:'103',  type:'Construction',    location:'Jubail',       pic:'Mr. Free',     end:'15 Apr 2030', value:12000000,  heads:129,  occ:45, status:'Active',   days:1461, lat:26.950, lng:49.585},
+  {name:'Rig 4',         client:'Petrorabig', num:'888',  type:'Consulting',      location:'Jeddah',       pic:'Mr. Free',     end:'06 Dec 2028', value:8000000,   heads:345,  occ:68, status:'Active',   days:966,  lat:21.543, lng:39.173},
+  {name:'Rig 5',         client:'Aramco',     num:'2913', type:'Operations',      location:'Dhahran',      pic:'Mr. Free',     end:'08 Dec 2028', value:32000000,  heads:287,  occ:99, status:'Active',   days:968,  lat:26.312, lng:50.132},
+  {name:'Qiddiya 5',     client:'Qiddiya',    num:'1',    type:'Operations',      location:'Riyadh',       pic:'Mr. Saeed',    end:'12 Jan 2027', value:9000000,   heads:24,   occ:75, status:'Active',   days:272,  lat:24.582, lng:46.325},
+  {name:'Qiddiya 6',     client:'Qiddiya',    num:'843',  type:'Operations',      location:'Riyadh',       pic:'Mr. Franz',    end:'08 Dec 2028', value:12346786,  heads:765,  occ:87, status:'Active',   days:968,  lat:24.592, lng:46.342},
+  {name:'Qiddiya 7',     client:'Qiddiya',    num:'763',  type:'Operations',      location:'Riyadh',       pic:'Mr. Mohammad', end:'12 Jan 2027', value:14876563,  heads:987,  occ:67, status:'Active',   days:272,  lat:24.575, lng:46.355},
+  {name:'Qiddiya 8',     client:'Qiddiya',    num:'675',  type:'Operations',      location:'Riyadh',       pic:'Mr. Afez',     end:'08 Dec 2028', value:12000000,  heads:287,  occ:46, status:'Active',   days:968,  lat:24.568, lng:46.332},
+  {name:'NCV1',          client:'Neom',       num:'765',  type:'Operations',      location:'Neom Region',  pic:'Mr. Ali',      end:'09 Jan 2032', value:8000000,   heads:3635, occ:32, status:'Active',   days:2095, lat:28.050, lng:35.200},
+  {name:'NCV2',          client:'Neom',       num:'564',  type:'Operations',      location:'Neom Region',  pic:'Mr. Afez',     end:'08 Dec 2028', value:46000000,  heads:365,  occ:23, status:'Active',   days:968,  lat:28.180, lng:35.380},
+  {name:'Pioneer Camp',  client:'Neom',       num:'532',  type:'Operations',      location:'Neom Region',  pic:'Mr. Ali',      end:'12 Jan 2027', value:23000000,  heads:287,  occ:76, status:'Active',   days:272,  lat:28.250, lng:35.500},
+  {name:'Trojena base',  client:'Neom',       num:'635',  type:'Operations',      location:'Neom Region',  pic:'Mr. Afez',     end:'08 Dec 2028', value:28888888,  heads:1827, occ:37, status:'Active',   days:968,  lat:28.000, lng:35.600},
+  {name:'NED',           client:'Nesma',      num:'524',  type:'Operations',      location:'Neom Region',  pic:'Mr. Ali',      end:'12 Oct 2035', value:64000000,  heads:476,  occ:97, status:'Active',   days:3467, lat:27.900, lng:35.450},
+];
+
+function makeIcon(p) {
+  const c = ST_C(p.status);
+  const sz = 36;
+  const html = `<div style="width:${sz}px;height:${sz}px;background:${c};border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid rgba(255,255,255,0.6);display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(0,0,0,0.25)"><span style="transform:rotate(45deg);color:#fff;font-size:7px;font-weight:700;text-align:center;line-height:1.1;padding:2px;word-break:break-all;max-width:26px">${p.name.slice(0,7)}</span></div>`;
+  return L.divIcon({html, className:'', iconSize:[sz,sz], iconAnchor:[sz/2,sz], popupAnchor:[0,-sz]});
+}
+
+function popupHTML(p) {
+  const oc = OCC_C(p.occ);
+  const dl = p.days<0?`Expired ${Math.abs(p.days)}d ago`:`${p.days}d remaining`;
+  return `<div class="pu">
+    <div class="pu-name">${p.name}</div>
+    <div class="pu-num">#${p.num}</div>
+    <span class="pu-badge ${ST_BC(p.status)}">${p.status}</span>
+    <div class="pu-grid">
+      <div><div class="pu-lbl">Client</div><div class="pu-val">${p.client}</div></div>
+      <div><div class="pu-lbl">Type</div><div class="pu-val">${p.type}</div></div>
+      <div><div class="pu-lbl">Location</div><div class="pu-val">${p.location}</div></div>
+      <div><div class="pu-lbl">In charge</div><div class="pu-val">${p.pic}</div></div>
+      <div><div class="pu-lbl">Value</div><div class="pu-val">${MONEY(p.value)}</div></div>
+      <div><div class="pu-lbl">Employees</div><div class="pu-val">${p.heads.toLocaleString()}</div></div>
+    </div>
+    <div class="pu-occ-row"><span style="color:#888;font-size:10px">Occupancy</span><span style="font-weight:500;font-size:12px;color:${oc}">${p.occ}%</span></div>
+    <div class="pu-bar-wrap"><div class="pu-bar-fill" style="width:${p.occ}%;background:${oc}"></div></div>
+    <div style="margin-top:7px;font-size:10px;color:${ST_C(p.status)};font-weight:500">${dl}</div>
+  </div>`;
+}
+
+const map = L.map('map',{center:[24.5,43],zoom:5,zoomControl:false});
+L.control.zoom({position:'topright'}).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
+  attribution:'&copy; <a href="https://carto.com/">CARTO</a>',subdomains:'abcd',maxZoom:19
+}).addTo(map);
+
+const markers = P.map((p,i)=>{
+  const m = L.marker([p.lat,p.lng],{icon:makeIcon(p)})
+    .bindPopup(popupHTML(p),{maxWidth:250})
+    .addTo(map);
+  m.on('click',()=>selectItem(i));
+  return m;
+});
+
+let selIdx = null;
+let curFilt = 'all';
+
+function selectItem(i) {
+  if(selIdx!==null){
+    const el=document.getElementById('pi'+selIdx);
+    if(el) el.classList.remove('sel');
+  }
+  selIdx=i;
+  const el=document.getElementById('pi'+i);
+  if(el){el.classList.add('sel');el.scrollIntoView({behavior:'smooth',block:'nearest'});}
+}
+
+function buildList(f) {
+  const ul = document.getElementById('proj-list');
+  ul.innerHTML='';
+  P.forEach((p,i)=>{
+    if(f!=='all' && p.status!==f) return;
+    const d=document.createElement('div');
+    d.className='pi'; d.id='pi'+i;
+    d.innerHTML=`<div class="pi-dot" style="background:${ST_C(p.status)}"></div>
+      <div class="pi-info">
+        <div class="pi-name">${p.name}</div>
+        <div class="pi-sub">${p.client} · ${p.location}</div>
+      </div>
+      <div class="pi-occ" style="color:${OCC_C(p.occ)}">${p.occ}%</div>`;
+    d.onclick=()=>{
+      map.flyTo([p.lat,p.lng],10,{duration:1.2});
+      setTimeout(()=>{ markers[i].openPopup(); selectItem(i); },1300);
+    };
+    ul.appendChild(d);
+  });
+}
+
+function filt(f,btn) {
+  curFilt=f;
+  document.querySelectorAll('.fp').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  buildList(f);
+  P.forEach((p,i)=>{
+    const show = f==='all'||p.status===f;
+    if(show){ if(!map.hasLayer(markers[i])) markers[i].addTo(map); }
+    else { if(map.hasLayer(markers[i])) map.removeLayer(markers[i]); }
+  });
+}
+
+buildList('all');
+map.fitBounds([[16,34],[32.5,56]]);
+</script>
